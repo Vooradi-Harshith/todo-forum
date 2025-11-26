@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '../
 # Import settings & Base
 from app.core.config import settings
 from app.db.base import Base  # Base.metadata for autogenerate
+from app.db import models  # This loads ALL models for Alembic
+
 
 # Alembic Config
 config = context.config

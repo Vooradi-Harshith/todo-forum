@@ -29,5 +29,5 @@ def create_access_token(
     encoded_jwt=jwt.encode(to_encode,settings.JWT_SECRET,algorithm=settings.JWT_ALGO)
     return encoded_jwt
 def decode_access_token(token:str)->dict:
-    payload=jwt.decode(token,settings.JWT_SECRET,algorithm=settings.JWT_ALGO)
+    payload=jwt.decode(token,settings.JWT_SECRET,algorithms=[settings.JWT_ALGO])
     return payload

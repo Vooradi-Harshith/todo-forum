@@ -1,0 +1,57 @@
+from fastapi import APIRouter,Depends,HTTPException
+from sqlalchemy.orm import Session
+
+
+from app.db.session import get_db
+from app.models.post import Post
+from app.models.thread import Thread
+from app.schemas.post import PostCreate, PostRead, PostList
+from app.api.v1.auth import get_current_user
+from app.models.user import User
+
+
+router=APIRouter(prefix='/threads',tags=['Posts'])
+
+
+@router.post('/{thread_id}/posts',response_model=PostRead)
+def create_post(thread_id:int,
+                payload:PostCreate,
+                db:Session=Depends(get_db),
+                current_user:User=Depends(get_current_user)):
+    thread=db.query(Thread).filter(Thread.id==thread_id).first()
+    if not thread:
+        raise HTTPException(status_code=404, detail='thread not found')
+    
+    post=Post(
+        content=payload.content,
+        thread_id=thread_id,
+        user_id=current_user.id
+    )
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+    return post
+
+
+@router.get("/{thread_id}/posts", response_model=PostList)
+def list_posts(thread_id: int,
+               page: int = 1,
+               page_size: int = 10,
+               db: Session = Depends(get_db)):
+
+    query = db.query(Post).filter(Post.thread_id == thread_id)
+
+    posts = (query.order_by(Post.created_at.asc())
+                  .offset((page - 1) * page_size)
+                  .limit(page_size)
+                  .all())
+
+    return PostList(
+        items=[PostRead.model_validate(p) for p in posts],
+        total=query.count(),
+        page=page,
+        page_size=page_size
+    )
+
+
+

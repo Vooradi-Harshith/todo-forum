@@ -8,30 +8,31 @@ from app.models.thread import Thread
 from app.schemas.post import PostCreate, PostRead, PostList
 from app.api.v1.auth import get_current_user
 from app.models.user import User
-
+from app.services.notifications import create_notification
+from app.models.notification import Notification
 
 router=APIRouter(prefix='/threads',tags=['Posts'])
 
 
-@router.post('/{thread_id}/posts',response_model=PostRead)
-def create_post(thread_id:int,
-                payload:PostCreate,
-                db:Session=Depends(get_db),
-                current_user:User=Depends(get_current_user)):
-    thread=db.query(Thread).filter(Thread.id==thread_id).first()
-    if not thread:
-        raise HTTPException(status_code=404, detail='thread not found')
-    
-    post=Post(
-        content=payload.content,
-        thread_id=thread_id,
-        user_id=current_user.id
-    )
+# app/api/v1/posts.py
+
+@router.post("/{thread_id}/posts", response_model=PostRead)
+def create_post(thread_id: int, data: PostCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    post = Post(content=data.content, thread_id=thread_id, user_id=current_user.id)
     db.add(post)
     db.commit()
     db.refresh(post)
-    return post
 
+    # 🔔 Notify thread owner
+    thread = db.query(Thread).filter(Thread.id == thread_id).first()
+    if thread and thread.owner_id != current_user.id:  # avoid self-notification
+        db.add(Notification(
+            user_id=thread.owner_id,
+            message=f"{current_user.username} posted in your thread."
+        ))
+        db.commit()
+
+    return post
 
 @router.get("/{thread_id}/posts", response_model=PostList)
 def list_posts(thread_id: int,

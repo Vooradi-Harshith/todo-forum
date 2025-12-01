@@ -16,4 +16,8 @@ class Thread(Base,BaseModel):
     owner:Mapped["User"]=relationship(back_populates="threads")
 
 
-    posts:Mapped[list["Post"]]=relationship(back_populates="thread")
+    posts: Mapped[list["Post"]] = relationship(
+        back_populates="thread",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )

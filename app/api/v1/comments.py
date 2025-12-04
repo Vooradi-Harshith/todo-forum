@@ -10,6 +10,9 @@ from app.services.notifications import create_notification
 
 def is_admin(user: User) -> bool:
     return bool(getattr(user, "role", None) and getattr(user.role, "name", "") == "admin")
+def is_admin_or_mod(user: User) -> bool:
+    if not user.role: return False
+    return user.role.name in ["admin", "moderator"]
 
 
 router=APIRouter(prefix='/posts/{post_id}/comments',tags=['comments'])
@@ -158,7 +161,7 @@ def delete_comment(
         raise HTTPException(status_code=404, detail="Comment not found")
 
     # Only comment owner or admin
-    if comment.user_id != current_user.id and not is_admin(current_user):
+    if comment.user_id != current_user.id and not is_admin_or_mod(current_user):
         raise HTTPException(status_code=403, detail="Not allowed to delete this comment")
 
     db.delete(comment)

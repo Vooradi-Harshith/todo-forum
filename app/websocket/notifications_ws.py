@@ -2,7 +2,7 @@ from typing import Dict,List
 from fastapi import APIRouter,WebSocket,WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from app.db.session import SessionLocal
+import app.db.session as session_module
 from app.utils.security import decode_access_token
 from app.models.user import User
 
@@ -58,7 +58,7 @@ async def notifications_ws(websocket:WebSocket):
      except Exception:
          await websocket.close(code=1008)
          return
-     db:Session=SessionLocal()
+     db:Session=session_module.SessionLocal()
 
      try:
          user=db.query(User).filter(User.id==user_id).first()

@@ -10,6 +10,9 @@ from app.models.user import User
 
 def is_admin(user: User) -> bool:
     return bool(getattr(user, "role", None) and getattr(user.role, "name", "") == "admin")
+def is_admin_or_mod(user: User) -> bool:
+    if not user.role: return False
+    return user.role.name in ["admin", "moderator"]
 
 router=APIRouter(prefix='/threads',tags=['threads'])
 
@@ -144,8 +147,8 @@ def delete_thread(
         raise HTTPException(status_code=404, detail="Thread not found")
 
     # Only owner or admin
-    if thread.owner_id != current_user.id and not is_admin(current_user):
-        raise HTTPException(status_code=403, detail="Not allowed to delete this thread")
+    if thread.owner_id != current_user.id and not is_admin_or_mod(current_user):
+        raise HTTPException(status_code=403, detail="Not allowed")
 
     db.delete(thread)
     db.commit()

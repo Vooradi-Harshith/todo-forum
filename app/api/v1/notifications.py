@@ -28,20 +28,7 @@ def get_notifications(page:int=1,
 
 
 # Mark notification as read
-@router.put("/{id}/read", response_model=NotificationRead)
-def mark_as_read(id: int, db: Session = Depends(get_db),
-                 current_user=Depends(get_current_user)):
 
-    notif = db.query(Notification).filter(Notification.id == id,
-                                          Notification.user_id == current_user.id).first()
-
-    if not notif:
-        raise HTTPException(status_code=404, detail="Notification not found")
-
-    notif.read = True
-    db.commit()
-    db.refresh(notif)
-    return notif
 @router.get("/unread", response_model=NotificationList)
 def get_unread_notifications(
     db: Session = Depends(get_db),

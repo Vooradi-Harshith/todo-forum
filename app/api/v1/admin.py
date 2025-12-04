@@ -1,5 +1,5 @@
 from fastapi import APIRouter,Depends,HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,joinedload
 
 from app.db.session import get_db
 from app.models.user import User
@@ -8,6 +8,7 @@ from app.models.post import Post
 from app.models.comment import Comment
 from app.core.auth_roles import required_admin
 from app.models.role import Role
+from app.schemas.user import UserRead
 router=APIRouter(prefix='/admin',tags=['admin'])
 
 
@@ -15,7 +16,7 @@ router=APIRouter(prefix='/admin',tags=['admin'])
 
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), admin=Depends(required_admin)):
-    return db.query(User).all()
+    return db.query(User).options(joinedload(User.role)).all()
 
 
 @router.put("/users/{user_id}/promote")
@@ -29,16 +30,42 @@ def promote_user(user_id: int, db: Session = Depends(get_db), admin=Depends(requ
     return {"message": f"{user.username} promoted to admin"}
 
 
-@router.put("/users/{user_id}/demote")
-def demote_user(user_id: int, db: Session = Depends(get_db), admin=Depends(required_admin)):
+@router.put("/users/{user_id}/promote_mod")
+def promote_to_moderator(user_id: int, db: Session = Depends(get_db), admin=Depends(required_admin)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user: raise HTTPException(404, "User not found")
 
-    user_role = db.query(Role).filter(Role.name == "user").first()
+    # Find or Create 'moderator' role
+    role = db.query(Role).filter(Role.name == "moderator").first()
+    if not role:
+        role = Role(name="moderator")
+        db.add(role); db.commit(); db.refresh(role)
+    
+    user.role_id = role.id
+    db.commit()
+    return {"message": f"{user.username} is now a Moderator"}
+
+
+
+
+@router.put("/users/{user_id}/demote")
+def demote_user(user_id: int, db: Session = Depends(get_db), admin=Depends(required_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    # Correct role name = "member"
+    user_role = db.query(Role).filter(Role.name == "member").first()
+    if not user_role:
+        # If DB doesn't have the role, create it
+        user_role = Role(name="member")
+        db.add(user_role)
+        db.commit()
+        db.refresh(user_role)
+
     user.role_id = user_role.id
     db.commit()
-    return {"message": f"{user.username} demoted to user"}
-
+    return {"message": f"{user.username} demoted to member"}
 
 # ============================ THREAD CONTROL ============================
 

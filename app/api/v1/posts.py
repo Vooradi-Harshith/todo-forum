@@ -15,6 +15,9 @@ router=APIRouter(prefix='/threads',tags=['Posts'])
 
 
 # app/api/v1/posts.py
+def is_admin_or_mod(user: User) -> bool:
+    if not user.role: return False
+    return user.role.name in ["admin", "moderator"]
 
 @router.post("/{thread_id}/posts", response_model=PostRead)
 def create_post(thread_id: int, data: PostCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -55,4 +58,24 @@ def list_posts(thread_id: int,
     )
 
 
+# ... existing imports ...
+from fastapi import status # Make sure status is imported
 
+@router.delete("/{thread_id}/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(
+    thread_id: int,
+    post_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+        
+    # Check permissions: Owner of the post OR Admin
+    if post.user_id != current_user.id and not is_admin_or_mod(current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this post")
+
+    db.delete(post)
+    db.commit()
+    return None

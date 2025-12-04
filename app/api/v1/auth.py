@@ -43,16 +43,51 @@ def register_user(payload:UserCreate,db:Session = Depends(get_db)):
 
     # Token endpoint (OAuth2 password flow compatible)
 
-@router.post('/token',response_model=Token)
-def login_for_access_token(form_data:OAuth2PasswordRequestForm=Depends(),db:Session=Depends(get_db)):
-    # form_data.username and form_data.password
-    user=db.query(User).filter(User.username==form_data.username).first()
-    if not user or not verify_password(form_data.password,user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail='Incorrect username or password',
-                            headers={'WWW-Authenticate':'Bearer'})
-    access_token_expires=timedelta(minutes=settings.ACCES_TOKEN_EXPIRE_MINUTES)
-    access_token=create_access_token(subject=str(user.id),expires_delta=access_token_expires)
-    return {'access_token':access_token,'token_type':'bearer'}
+# @router.post('/token')
+# def login_for_access_token(payload: LoginIn, db: Session = Depends(get_db)):
+#     user = db.query(User).filter(User.username == payload.username).first()
+
+#     if not user or not verify_password(payload.password, user.hashed_password):
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail='Incorrect username or password'
+#         )
+
+#     access_token_expires = timedelta(minutes=settings.ACCES_TOKEN_EXPIRE_MINUTES)
+#     access_token = create_access_token(subject=str(user.id), expires_delta=access_token_expires)
+
+#     return {
+#         "access_token": access_token,
+#         "token_type": "bearer",
+#         "user_id": user.id,
+#         "role": user.role.name
+#     }
+@router.post('/token')
+def login_for_access_token(payload: LoginIn, db: Session = Depends(get_db)):
+    print("🔥 Incoming Login Payload:", payload)   # DEBUG
+
+    user = db.query(User).filter(User.username == payload.username).first()
+
+    if not user:
+        print("❌ User not found:", payload.username)
+
+    if user and not verify_password(payload.password, user.hashed_password):
+        print("❌ Wrong password for:", payload.username)
+
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+
+    access_token_expires = timedelta(minutes=settings.ACCES_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(str(user.id), access_token_expires)
+
+    print("✅ Login success:", user.username)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "role": user.role.name
+    }
 
 # Helper to get current user
 

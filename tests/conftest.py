@@ -15,11 +15,15 @@ from starlette.testclient import TestClient
 
 from app.main import app
 from app.db.base import Base
-from app.db.session import engine as project_engine, SessionLocal as ProjectSessionLocal, get_db
+from app.db.session import (
+    engine as project_engine,
+    SessionLocal as ProjectSessionLocal,
+    get_db,
+)
 from app.utils.security import create_access_token
 from app.core.config import settings
 import pytest_asyncio
-from httpx import AsyncClient,ASGITransport
+from httpx import AsyncClient, ASGITransport
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", settings.DATABASE_URL)
 
@@ -28,6 +32,7 @@ SessionLocal = ProjectSessionLocal
 
 
 import app.db.session as session_module
+
 
 @pytest.fixture(autouse=True)
 def override_sessionlocal(db_session):
@@ -67,6 +72,7 @@ def override_get_db(db_session):
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
+
 @pytest_asyncio.fixture
 async def async_client():
     transport = ASGITransport(app=app)
@@ -84,4 +90,5 @@ def client():
 def create_token_for_user():
     def _create(user_id: int, expires_delta=None):
         return create_access_token(str(user_id), expires_delta)
+
     return _create

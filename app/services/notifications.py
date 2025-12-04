@@ -5,11 +5,13 @@ from typing import Optional
 import anyio
 from app.websocket.notifications_ws import manager
 
-def create_notification(db:Session,user_id:int,message:str):
-    notif=Notification(user_id=user_id,message=message)
+
+def create_notification(db: Session, user_id: int, message: str):
+    notif = Notification(user_id=user_id, message=message)
     db.add(notif)
     db.commit()
     db.refresh(notif)
+
     # Fire-and-forget push to WebSocket (if user connected)
     async def _push():
         await manager.send_personal_json(

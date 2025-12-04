@@ -1,4 +1,4 @@
-from fastapi import APIRouter,Depends,HTTPException,status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -8,22 +8,29 @@ from app.api.v1.auth import get_current_user
 from app.schemas.thread import ThreadCreate, ThreadRead, ThreadList
 from app.models.user import User
 
+
 def is_admin(user: User) -> bool:
-    return bool(getattr(user, "role", None) and getattr(user.role, "name", "") == "admin")
+    return bool(
+        getattr(user, "role", None) and getattr(user.role, "name", "") == "admin"
+    )
+
+
 def is_admin_or_mod(user: User) -> bool:
-    if not user.role: return False
+    if not user.role:
+        return False
     return user.role.name in ["admin", "moderator"]
 
-router=APIRouter(prefix='/threads',tags=['threads'])
+
+router = APIRouter(prefix="/threads", tags=["threads"])
 
 
-@router.post('/',response_model=ThreadRead,status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ThreadRead, status_code=status.HTTP_201_CREATED)
 def create_thread(
-    payload:ThreadCreate,
-    db:Session=Depends(get_db),
-    current_user:User=Depends(get_current_user),
+    payload: ThreadCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    thread=Thread(
+    thread = Thread(
         title=payload.title,
         content=payload.content,
         owner_id=current_user.id,
@@ -33,30 +40,28 @@ def create_thread(
     db.refresh(thread)
     return thread
 
-@router.get('/',response_model=ThreadList)
-def list_threads(
-    page:int=1,
-    page_size:int=10,
-    search:str |None=None,
-    db:Session=Depends(get_db)
-):
-    if page<1:
-        page=1
-    if page_size<1 or page_size>100:
-        page_size=10
 
-    query=db.query(Thread)
+@router.get("/", response_model=ThreadList)
+def list_threads(
+    page: int = 1,
+    page_size: int = 10,
+    search: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 10
+
+    query = db.query(Thread)
 
     if search:
-        like=f'%{search}%'
-        query=query.filter(
-            (Thread.title.ilike(like)) |(Thread.content.ilike(like))
-        )
-    total=query.count()
+        like = f"%{search}%"
+        query = query.filter((Thread.title.ilike(like)) | (Thread.content.ilike(like)))
+    total = query.count()
 
     threads = (
-        query
-        .order_by(Thread.created_at.desc())
+        query.order_by(Thread.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -101,18 +106,18 @@ def search_threads(
     )
 
 
-@router.get('/{thread_id}',response_model=ThreadRead)
+@router.get("/{thread_id}", response_model=ThreadRead)
 def get_thread(
-        thread_id:int,
-        db:Session=Depends(get_db),
+    thread_id: int,
+    db: Session = Depends(get_db),
 ):
-    thread=db.query(Thread).filter(Thread.id==thread_id).first()
+    thread = db.query(Thread).filter(Thread.id == thread_id).first()
     if not thread:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='thread not found'
+            status_code=status.HTTP_404_NOT_FOUND, detail="thread not found"
         )
     return thread
+
 
 @router.put("/{thread_id}", response_model=ThreadRead)
 def update_thread(
@@ -135,6 +140,7 @@ def update_thread(
     db.commit()
     db.refresh(thread)
     return thread
+
 
 @router.delete("/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_thread(

@@ -30,7 +30,7 @@ def create_user(db, username="user1", email=None, password="pass123") -> User:
         username=username,
         email=email,
         hashed_password=hash_password(password),
-        role_id=member_role.id
+        role_id=member_role.id,
     )
     db.add(user)
     db.commit()
@@ -48,7 +48,7 @@ def create_admin(db, username="admin", email=None, password="adminpass"):
         username=username,
         email=email,
         hashed_password=hash_password(password),
-        role_id=admin_role.id
+        role_id=admin_role.id,
     )
     db.add(user)
     db.commit()
@@ -56,7 +56,9 @@ def create_admin(db, username="admin", email=None, password="adminpass"):
     return user
 
 
-def create_thread(db, owner_id, title="Test Thread", content="Thread content") -> Thread:
+def create_thread(
+    db, owner_id, title="Test Thread", content="Thread content"
+) -> Thread:
     t = Thread(title=title, content=content, owner_id=owner_id)
     db.add(t)
     db.commit()

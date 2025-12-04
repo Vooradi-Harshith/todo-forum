@@ -1,31 +1,35 @@
-from fastapi import APIRouter,Depends,HTTPException,status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
 from app.models.comment import Comment
 from app.models.post import Post
-from app.schemas.comment import CommentRead,CommentCreate,CommentList,CommentTree
+from app.schemas.comment import CommentRead, CommentCreate, CommentList, CommentTree
 from app.api.v1.auth import get_current_user
 from app.services.notifications import create_notification
 
+
 def is_admin(user: User) -> bool:
-    return bool(getattr(user, "role", None) and getattr(user.role, "name", "") == "admin")
+    return bool(
+        getattr(user, "role", None) and getattr(user.role, "name", "") == "admin"
+    )
+
+
 def is_admin_or_mod(user: User) -> bool:
-    if not user.role: return False
+    if not user.role:
+        return False
     return user.role.name in ["admin", "moderator"]
 
 
-router=APIRouter(prefix='/posts/{post_id}/comments',tags=['comments'])
+router = APIRouter(prefix="/posts/{post_id}/comments", tags=["comments"])
 
 
-
-
-@router.post('/', response_model=CommentRead)
+@router.post("/", response_model=CommentRead)
 def create_comment(
     post_id: int,
     payload: CommentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     post = db.query(Post).filter(Post.id == post_id).first()
     if not post:
@@ -34,7 +38,9 @@ def create_comment(
     # If it's a reply to another comment
     parent_comment = None
     if payload.parent_id:
-        parent_comment = db.query(Comment).filter(Comment.id == payload.parent_id).first()
+        parent_comment = (
+            db.query(Comment).filter(Comment.id == payload.parent_id).first()
+        )
         if not parent_comment:
             raise HTTPException(status_code=400, detail="Parent comment does not exist")
 
@@ -42,7 +48,7 @@ def create_comment(
         content=payload.content,
         post_id=post_id,
         user_id=current_user.id,
-        parent_id=payload.parent_id
+        parent_id=payload.parent_id,
     )
     db.add(new_comment)
     db.commit()
@@ -55,18 +61,23 @@ def create_comment(
     # Notify post owner (if not self)
     if post.user_id != current_user.id:
         create_notification(
-            db, post.user_id,
-            message=f"{current_user.username} commented on your post."
+            db, post.user_id, message=f"{current_user.username} commented on your post."
         )
 
     # Notify parent comment owner (only for nested reply)
-    if payload.parent_id and parent_comment and parent_comment.user_id != current_user.id:
+    if (
+        payload.parent_id
+        and parent_comment
+        and parent_comment.user_id != current_user.id
+    ):
         create_notification(
-            db, parent_comment.user_id,
-            message=f"{current_user.username} replied to your comment."
+            db,
+            parent_comment.user_id,
+            message=f"{current_user.username} replied to your comment.",
         )
 
     return new_comment
+
 
 @router.get("/", response_model=CommentList)
 def list_comments(
@@ -91,6 +102,7 @@ def list_comments(
         page_size=page_size,
     )
 
+
 @router.get("/tree", response_model=list[CommentTree])
 def list_comment_tree(post_id: int, db: Session = Depends(get_db)):
 
@@ -98,8 +110,7 @@ def list_comment_tree(post_id: int, db: Session = Depends(get_db)):
 
     # Convert comment rows → CommentTree models
     comment_map: dict[int, CommentTree] = {
-        c.id: CommentTree.model_validate(c, from_attributes=True)
-        for c in comments
+        c.id: CommentTree.model_validate(c, from_attributes=True) for c in comments
     }
 
     # Ensure empty children array exists for each
@@ -116,6 +127,7 @@ def list_comment_tree(post_id: int, db: Session = Depends(get_db)):
             roots.append(node)
 
     return roots
+
 
 @router.put("/{comment_id}", response_model=CommentRead)
 def update_comment(
@@ -145,6 +157,7 @@ def update_comment(
     db.refresh(comment)
     return comment
 
+
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_comment(
     post_id: int,
@@ -162,7 +175,9 @@ def delete_comment(
 
     # Only comment owner or admin
     if comment.user_id != current_user.id and not is_admin_or_mod(current_user):
-        raise HTTPException(status_code=403, detail="Not allowed to delete this comment")
+        raise HTTPException(
+            status_code=403, detail="Not allowed to delete this comment"
+        )
 
     db.delete(comment)
     db.commit()

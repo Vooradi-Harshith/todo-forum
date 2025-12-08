@@ -16,6 +16,9 @@ class ThreadRead(ThreadBase):
     owner_id: int
     created_at: datetime
 
+    score: int = 0
+    user_vote: int = 0
+    
     class Config:
         orm_mode = True
 

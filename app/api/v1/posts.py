@@ -28,7 +28,14 @@ def create_post(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    post = Post(content=data.content, thread_id=thread_id, user_id=current_user.id)
+    # Pass image_data to the Post model
+    post = Post(
+        content=data.content, 
+        thread_id=thread_id, 
+        user_id=current_user.id,
+        image_data=data.image_data  # <--- ADD THIS
+    )
+    
     db.add(post)
     db.commit()
     db.refresh(post)

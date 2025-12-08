@@ -5,3 +5,4 @@ from app.models.thread import Thread
 from app.models.post import Post
 from app.models.comment import Comment
 from app.models.notification import Notification
+from app.models.vote import Vote

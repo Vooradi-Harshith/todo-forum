@@ -20,3 +20,4 @@ class Post(Base, BaseModel):
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="post", cascade="all, delete-orphan", passive_deletes=True
     )
+    image_data:Mapped[str] = mapped_column(Text,nullable=True)

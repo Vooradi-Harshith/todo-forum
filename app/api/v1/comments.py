@@ -7,18 +7,7 @@ from app.models.post import Post
 from app.schemas.comment import CommentRead, CommentCreate, CommentList, CommentTree
 from app.api.v1.auth import get_current_user
 from app.services.notifications import create_notification
-
-
-def is_admin(user: User) -> bool:
-    return bool(
-        getattr(user, "role", None) and getattr(user.role, "name", "") == "admin"
-    )
-
-
-def is_admin_or_mod(user: User) -> bool:
-    if not user.role:
-        return False
-    return user.role.name in ["admin", "moderator"]
+from app.core.permissions import is_admin,is_admin_or_mod
 
 
 router = APIRouter(prefix="/posts/{post_id}/comments", tags=["comments"])

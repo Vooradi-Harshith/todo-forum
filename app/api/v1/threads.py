@@ -1,46 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import Optional
-from jose import jwt
+from pydantic import BaseModel
 
 from app.db.session import get_db
 from app.models.thread import Thread
-from app.api.v1.auth import get_current_user
-from app.schemas.thread import ThreadCreate, ThreadRead, ThreadList
 from app.models.user import User
 from app.models.vote import Vote
-from app.schemas.auth import TokenPayload
-from app.core.config import settings
-from pydantic import BaseModel
+from app.api.v1.auth import get_current_user
+from app.schemas.thread import ThreadCreate, ThreadRead, ThreadList
 
-# --- HELPERS ---
+# 👇 NEW IMPORTS
+from app.core.permissions import is_admin, is_admin_or_mod
+from app.api.deps import get_optional_user_id
 
-def is_admin(user: User) -> bool:
-    return bool(
-        getattr(user, "role", None) and getattr(user.role, "name", "") == "admin"
-    )
+router = APIRouter(prefix="/threads", tags=["threads"])
 
-def is_admin_or_mod(user: User) -> bool:
-    if not user.role:
-        return False
-    return user.role.name in ["admin", "moderator"]
-
-# 1. Helper to manually extract User ID from header (so Guests don't get 401 Error)
-def get_user_id_from_header(authorization: Optional[str], db: Session):
-    if not authorization:
-        return None
-    try:
-        scheme, token = authorization.split()
-        if scheme.lower() != "bearer":
-            return None
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGO])
-        token_data = TokenPayload(**payload)
-        return token_data.sub
-    except:
-        return None
-
-# 2. Helper to Calculate Score & Check if User Voted
+# --- LOCAL HELPER ---
+# Kept here because it uses specific models (Thread/Vote) coupled to this domain
 def enrich_thread_with_votes(thread, db: Session, user_id: Optional[int] = None):
     # Calculate Score (Sum of all votes)
     score = db.query(func.sum(Vote.value)).filter(Vote.thread_id == thread.id).scalar()
@@ -48,17 +26,17 @@ def enrich_thread_with_votes(thread, db: Session, user_id: Optional[int] = None)
 
     # Check User Vote (1, -1, or 0)
     if user_id:
-        user_vote = db.query(Vote.value).filter(
-            Vote.thread_id == thread.id,
-            Vote.user_id == user_id
-        ).scalar()
+        user_vote = (
+            db.query(Vote.value)
+            .filter(Vote.thread_id == thread.id, Vote.user_id == user_id)
+            .scalar()
+        )
         thread.user_vote = user_vote or 0
     else:
         thread.user_vote = 0
-    
+
     return thread
 
-router = APIRouter(prefix="/threads", tags=["threads"])
 
 # --- ROUTES ---
 
@@ -76,7 +54,7 @@ def create_thread(
     db.add(thread)
     db.commit()
     db.refresh(thread)
-    # New threads have 0 score, no enrichment needed strictly, but good practice
+    
     thread.score = 0
     thread.user_vote = 0
     return thread
@@ -88,13 +66,13 @@ def list_threads(
     page_size: int = 10,
     search: str | None = None,
     db: Session = Depends(get_db),
-    authorization: Optional[str] = Header(None) # <--- Manual Header Read
+    # 👇 CLEANER: Using the new dependency
+    current_user_id: Optional[int] = Depends(get_optional_user_id), 
 ):
-    # Identify the user (if logged in)
-    current_user_id = get_user_id_from_header(authorization, db)
-
-    if page < 1: page = 1
-    if page_size < 1 or page_size > 100: page_size = 10
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 10
 
     query = db.query(Thread)
 
@@ -109,12 +87,12 @@ def list_threads(
         .limit(page_size)
         .all()
     )
-    
+
     # 3. ENRICH WITH VOTES
     for t in threads:
         enrich_thread_with_votes(t, db, current_user_id)
 
-    # Convert to Pydantic models manually to ensure score/user_vote are included
+    # Convert manually to ensure score/user_vote are included
     thread_items = [ThreadRead.model_validate(t, from_attributes=True) for t in threads]
 
     return ThreadList(
@@ -131,10 +109,8 @@ def search_threads(
     page: int = 1,
     page_size: int = 10,
     db: Session = Depends(get_db),
-    authorization: Optional[str] = Header(None) 
+    current_user_id: Optional[int] = Depends(get_optional_user_id),
 ):
-    current_user_id = get_user_id_from_header(authorization, db)
-
     query = db.query(Thread).filter(
         or_(
             Thread.title.ilike(f"%{q}%"),
@@ -150,7 +126,6 @@ def search_threads(
         .all()
     )
 
-    # ENRICH WITH VOTES
     for t in threads:
         enrich_thread_with_votes(t, db, current_user_id)
 
@@ -166,19 +141,15 @@ def search_threads(
 def get_thread(
     thread_id: int,
     db: Session = Depends(get_db),
-    authorization: Optional[str] = Header(None) 
+    current_user_id: Optional[int] = Depends(get_optional_user_id),
 ):
-    current_user_id = get_user_id_from_header(authorization, db)
-
     thread = db.query(Thread).filter(Thread.id == thread_id).first()
     if not thread:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="thread not found"
         )
-    
-    # ENRICH WITH VOTES
-    enrich_thread_with_votes(thread, db, current_user_id)
 
+    enrich_thread_with_votes(thread, db, current_user_id)
     return thread
 
 
@@ -193,6 +164,7 @@ def update_thread(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
+    # 👇 Using the imported helper
     if thread.owner_id != current_user.id and not is_admin(current_user):
         raise HTTPException(status_code=403, detail="Not allowed to edit this thread")
 
@@ -201,8 +173,7 @@ def update_thread(
 
     db.commit()
     db.refresh(thread)
-    
-    # Enrich before returning (User is current_user)
+
     enrich_thread_with_votes(thread, db, current_user.id)
     return thread
 
@@ -217,6 +188,7 @@ def delete_thread(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
+    # 👇 Using the imported helper
     if thread.owner_id != current_user.id and not is_admin_or_mod(current_user):
         raise HTTPException(status_code=403, detail="Not allowed")
 
@@ -227,44 +199,45 @@ def delete_thread(
 
 # --- VOTE LOGIC ---
 class VoteRequest(BaseModel):
-    dir: int # 1 or -1
+    dir: int  # 1 or -1
+
 
 @router.post("/{thread_id}/vote")
-@router.post("/{thread_id}/vote")
 def vote_thread(
-    thread_id: int, 
+    thread_id: int,
     vote_req: VoteRequest,
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # 1. Check Thread
-    thread = db.query(Thread).filter(Thread.id == thread_id).first()
+    # 1. Check Thread & LOCK ROW
+    thread = db.query(Thread).filter(Thread.id == thread_id).with_for_update().first()
+
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
 
     # 2. Find Existing Vote
-    found_vote = db.query(Vote).filter(
-        Vote.thread_id == thread_id, 
-        Vote.user_id == current_user.id
-    ).first()
+    found_vote = (
+        db.query(Vote)
+        .filter(Vote.thread_id == thread_id, Vote.user_id == current_user.id)
+        .first()
+    )
 
-    dir = vote_req.dir # 1 (Up) or -1 (Down)
+    dir = vote_req.dir  # 1 (Up) or -1 (Down)
 
     if found_vote:
         if found_vote.value == dir:
-            # User clicked same button -> REMOVE Vote (Toggle off)
             db.delete(found_vote)
         else:
-            # User changed mind (Up -> Down or Down -> Up) -> UPDATE Vote
             found_vote.value = dir
     else:
-        # No previous vote -> CREATE Vote
         new_vote = Vote(user_id=current_user.id, thread_id=thread_id, value=dir)
         db.add(new_vote)
 
     db.commit()
 
     # 3. Return the new total score
-    new_score = db.query(func.sum(Vote.value)).filter(Vote.thread_id == thread_id).scalar() or 0
-    
+    new_score = (
+        db.query(func.sum(Vote.value)).filter(Vote.thread_id == thread_id).scalar() or 0
+    )
+
     return {"score": new_score}

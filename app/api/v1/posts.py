@@ -10,15 +10,12 @@ from app.api.v1.auth import get_current_user
 from app.models.user import User
 from app.services.notifications import create_notification
 from app.models.notification import Notification
+from app.core.permissions import is_admin_or_mod
 
 router = APIRouter(prefix="/threads", tags=["Posts"])
 
 
 # app/api/v1/posts.py
-def is_admin_or_mod(user: User) -> bool:
-    if not user.role:
-        return False
-    return user.role.name in ["admin", "moderator"]
 
 
 @router.post("/{thread_id}/posts", response_model=PostRead)
